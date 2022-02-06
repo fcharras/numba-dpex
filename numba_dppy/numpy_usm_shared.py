@@ -71,7 +71,7 @@ def dprint(*args):
         sys.stdout.flush()
 
 
-import dpctl
+import dpctl  # for eval()
 from dpctl.memory import MemoryUSMShared
 
 import numba_dppy._usm_shared_allocator_ext
@@ -84,103 +84,7 @@ for (
     llb.add_symbol(py_name, c_address)
 
 
-class UsmSharedArrayType(DPPYArray):
-    """Creates a Numba type for Numpy arrays that are stored in USM shared
-    memory.  We inherit from Numba's existing Numpy array type but overload
-    how this type is printed during dumping of typing information and we
-    implement the special __array_ufunc__ function to determine who this
-    type gets combined with scalars and regular Numpy types.
-    We re-use Numpy functions as well but those are going to return Numpy
-    arrays allocated in USM and we use the overloaded copy function to
-    convert such USM-backed Numpy arrays into typed USM arrays."""
-
-    def __init__(
-        self,
-        dtype,
-        ndim,
-        layout,
-        readonly=False,
-        name=None,
-        aligned=True,
-        addrspace=None,
-    ):
-        # This name defines how this type will be shown in Numba's type dumps.
-        name = "UsmArray:ndarray(%s, %sd, %s)" % (dtype, ndim, layout)
-        super(UsmSharedArrayType, self).__init__(
-            dtype,
-            ndim,
-            layout,
-            # py_type=ndarray,
-            readonly=readonly,
-            name=name,
-            addrspace=addrspace,
-        )
-
-    def copy(self, *args, **kwargs):
-        retty = super(UsmSharedArrayType, self).copy(*args, **kwargs)
-        if isinstance(retty, types.Array):
-            return UsmSharedArrayType(
-                dtype=retty.dtype, ndim=retty.ndim, layout=retty.layout
-            )
-        else:
-            return retty
-
-    # Tell Numba typing how to combine UsmSharedArrayType with other ndarray types.
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        if method == "__call__":
-            for inp in inputs:
-                if not isinstance(
-                    inp, (UsmSharedArrayType, types.Array, types.Number)
-                ):
-                    return None
-
-            return UsmSharedArrayType
-        else:
-            return None
-
-    @property
-    def box_type(self):
-        return ndarray
-
-
-# This tells Numba how to create a UsmSharedArrayType when a usmarray is passed
-# into a njit function.
-@typeof_impl.register(ndarray)
-def typeof_ta_ndarray(val, c):
-    try:
-        dtype = numpy_support.from_dtype(val.dtype)
-    except NotImplementedError:
-        raise ValueError("Unsupported array dtype: %s" % (val.dtype,))
-    layout = numpy_support.map_layout(val)
-    readonly = not val.flags.writeable
-    return UsmSharedArrayType(dtype, val.ndim, layout, readonly=readonly)
-
-
-# This tells Numba to use the default Numpy ndarray data layout for
-# object of type UsmArray.
-# register_model(UsmSharedArrayType)(DPPYArrayModel)
-register_model(UsmSharedArrayType)(numba.core.datamodel.models.ArrayModel)
-# dppy_target.spirv_data_model_manager.register(UsmSharedArrayType, DPPYArrayModel)
-dppy_target.spirv_data_model_manager.register(
-    UsmSharedArrayType, numba.core.datamodel.models.ArrayModel
-)
-
-# This tells Numba how to convert from its native representation
-# of a UsmArray in a njit function back to a Python UsmArray.
-@box(UsmSharedArrayType)
-def box_array(typ, val, c):
-    nativearycls = c.context.make_array(typ)
-    nativeary = nativearycls(c.context, c.builder, value=val)
-    if c.context.enable_nrt:
-        np_dtype = numpy_support.as_dtype(typ.dtype)
-        dtypeptr = c.env_manager.read_const(c.env_manager.add_const(np_dtype))
-        # Steals NRT ref
-        newary = c.pyapi.nrt_adapt_ndarray_to_python(typ, val, dtypeptr)
-        return newary
-    else:
-        parent = nativeary.parent
-        c.pyapi.incref(parent)
-        return parent
+from numba_dppy.types import UsmSharedArrayType
 
 
 @overload_classmethod(UsmSharedArrayType, "_allocate")

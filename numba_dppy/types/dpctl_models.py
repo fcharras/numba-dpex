@@ -12,14 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from . import (
-    dpctl_boxing,
-    dpctl_models,
-    dpctl_typeof,
-    dpnp_boxing,
-    dpnp_llvm_registration,
-    dpnp_models,
-    dpnp_typeof,
-)
-from .dpctl_types import *
-from .dpnp_types import *
+from numba.core.datamodel.models import ArrayModel
+from numba.extending import register_model
+
+from numba_dppy import target as dppy_target
+
+from .dpctl_types import UsmSharedArrayType
+
+# This tells Numba to use the default Numpy ndarray data layout for
+# object of type UsmArray.
+# register_model(UsmSharedArrayType)(DPPYArrayModel)
+register_model(UsmSharedArrayType)(ArrayModel)
+# dppy_target.spirv_data_model_manager.register(UsmSharedArrayType, DPPYArrayModel)
+dppy_target.spirv_data_model_manager.register(UsmSharedArrayType, ArrayModel)

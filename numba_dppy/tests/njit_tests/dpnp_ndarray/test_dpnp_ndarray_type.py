@@ -26,8 +26,7 @@ from dpctl.tensor.numpy_usm_shared import ndarray as dpctl_ndarray
 from dpnp import ndarray as dpnp_ndarray
 from numba import njit, typeof, types
 
-from numba_dppy.numpy_usm_shared import UsmSharedArrayType
-from numba_dppy.types import dpnp_ndarray_Type
+from numba_dppy.types import UsmSharedArrayType, dpnp_ndarray_Type
 
 
 @pytest.mark.parametrize(
