@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import dpctl
-import dpctl.tensor as dpt
 import numpy as np
 import pytest
+from dpctl.tensor import usm_ndarray
 from numba import njit
 
 import numba_dppy as dppy
@@ -66,7 +66,7 @@ def test_consuming_usm_ndarray(filter_str, dtype, usm_type):
     got = np.ones_like(a)
 
     with dpctl.device_context(filter_str) as gpu_queue:
-        da = dpt.usm_ndarray(
+        da = usm_ndarray(
             a.shape,
             dtype=a.dtype,
             buffer=usm_type,
@@ -74,7 +74,7 @@ def test_consuming_usm_ndarray(filter_str, dtype, usm_type):
         )
         da.usm_data.copy_from_host(a.reshape((-1)).view("|u1"))
 
-        db = dpt.usm_ndarray(
+        db = usm_ndarray(
             b.shape,
             dtype=b.dtype,
             buffer=usm_type,
@@ -82,7 +82,7 @@ def test_consuming_usm_ndarray(filter_str, dtype, usm_type):
         )
         db.usm_data.copy_from_host(b.reshape((-1)).view("|u1"))
 
-        dc = dpt.usm_ndarray(
+        dc = usm_ndarray(
             got.shape,
             dtype=got.dtype,
             buffer=usm_type,

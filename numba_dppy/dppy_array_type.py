@@ -87,21 +87,13 @@ class DPPYArray(Array):
 class DPPYArrayModel(StructModel):
     def __init__(self, dmm, fe_type):
         ndim = fe_type.ndim
+        addrspace = fe_type.addrspace
         members = [
-            (
-                "meminfo",
-                types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),
-            ),
-            (
-                "parent",
-                types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),
-            ),
+            ("meminfo", types.CPointer(fe_type.dtype, addrspace=addrspace)),
+            ("parent", types.CPointer(fe_type.dtype, addrspace=addrspace)),
             ("nitems", types.intp),
             ("itemsize", types.intp),
-            (
-                "data",
-                types.CPointer(fe_type.dtype, addrspace=fe_type.addrspace),
-            ),
+            ("data", types.CPointer(fe_type.dtype, addrspace=addrspace)),
             ("shape", types.UniTuple(types.intp, ndim)),
             ("strides", types.UniTuple(types.intp, ndim)),
         ]
