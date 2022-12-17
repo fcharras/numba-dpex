@@ -6,10 +6,15 @@
 import dpctl.tensor as dpt
 
 import numba_dpex as dpex
+from numba_dpex import int32, usm_ndarray, void
 from numba_dpex.core.kernel_interface.dispatcher import Dispatcher
 
+ty1 = usm_ndarray(int32, 2, "C", "device", "opencl:gpu")
+print(ty1)
 
-@dpex.kernel
+
+# @dpex.kernel(void(int32[:], int32[:], int32[:]), device="opencl:gpu")
+@dpex.kernel(void(ty1, ty1, ty1), device="opencl:gpu")
 def data_parallel_sum(a, b, c):
     """
     Vector addition using the ``kernel`` decorator.
@@ -18,19 +23,19 @@ def data_parallel_sum(a, b, c):
     c[i] = a[i] + b[i]
 
 
-def main():
-    a = dpt.arange(0, 100, device="level_zero:gpu:0")
-    b = dpt.arange(0, 100, device="level_zero:gpu:0")
-    c = dpt.zeros_like(a, device="level_zero:gpu:0")
+# def main():
+#     a = dpt.arange(0, 100, device="level_zero:gpu:0")
+#     b = dpt.arange(0, 100, device="level_zero:gpu:0")
+#     c = dpt.zeros_like(a, device="level_zero:gpu:0")
 
-    # d = Dispatcher(pyfunc=data_parallel_sum)
-    # d(a, b, c, global_range=[100])
-    data_parallel_sum[(100,)](a, b, c)
-    print(dpt.asnumpy(a))
-    print(dpt.asnumpy(b))
-    print(dpt.asnumpy(c))
-    print("Done...")
+#     # d = Dispatcher(pyfunc=data_parallel_sum)
+#     # d(a, b, c, global_range=[100])
+#     data_parallel_sum[(100,)](a, b, c)
+#     print(dpt.asnumpy(a))
+#     print(dpt.asnumpy(b))
+#     print(dpt.asnumpy(c))
+#     print("Done...")
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
