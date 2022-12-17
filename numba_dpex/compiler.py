@@ -21,7 +21,7 @@ from numba_dpex import config
 from numba_dpex.core.exceptions import KernelHasReturnValueError
 from numba_dpex.core.passbuilder import PassBuilder
 from numba_dpex.core.types import Array
-from numba_dpex.dpctl_iface import USMNdArrayType
+from numba_dpex.core.types.usm_ndarray_type import USMNdArrayType
 from numba_dpex.dpctl_support import dpctl_version
 from numba_dpex.parfor_diagnostics import ExtendedParforDiagnostics
 from numba_dpex.utils import (
