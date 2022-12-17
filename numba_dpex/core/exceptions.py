@@ -23,14 +23,20 @@ class KernelHasReturnValueError(Exception):
         the kernel function.
     """
 
-    def __init__(self, kernel_name, return_type) -> None:
+    def __init__(self, kernel_name, return_type, sig=None) -> None:
         self.return_type = return_type
-        self.kernel_name = kernel_name
-        self.message = (
-            f'Kernel "{self.kernel_name}" has a return value '
-            f'of type "{self.return_type}". '
-            "A numba-dpex kernel must have a void return type."
-        )
+        if sig:
+            self.message = (
+                f'Specialized kernel signature "{sig}" has a return value '
+                f'of type "{return_type}". '
+                "A numba-dpex kernel must have a void return type."
+            )
+        else:
+            self.message = (
+                f'Kernel "{kernel_name}" has a return value '
+                f'of type "{return_type}". '
+                "A numba-dpex kernel must have a void return type."
+            )
 
         super().__init__(self.message)
 
@@ -320,4 +326,21 @@ class UnsupportedCompilationModeError(Exception):
         self.message = (
             'The dpex compiler does not support the "force_pyobject" setting.'
         )
+        super().__init__(self.message)
+
+
+class IncompleteKernelSpecializationError(Exception):
+    def __init__(self, no_device=True, no_usm_types=True) -> None:
+        self.message = (
+            "A kernel cannot be specialized for eager compilation without "
+            "specifying the "
+        )
+        if no_device and no_usm_types:
+            self.message += '"device" and "usm_types" keyword arguments.'
+        elif no_device:
+            self.message += '"device" keyword argument.'
+        elif no_usm_types:
+            self.message += '"usm_types" keyword argument.'
+        else:
+            self.message += "required keyword arguments."
         super().__init__(self.message)

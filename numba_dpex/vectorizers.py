@@ -8,6 +8,8 @@ import warnings
 
 import dpctl
 import numpy as np
+from numba.core import sigutils, types
+from numba.core.typing import signature
 from numba.np.ufunc import deviceufunc
 
 import numba_dpex as dpex
@@ -25,7 +27,68 @@ def __vectorized_{name}({args}, __out__):
 """
 
 
+def to_dtype(ty):
+    return np.dtype(str(ty))
+
+
 class Vectorize(deviceufunc.DeviceVectorize):
+    def __init__(self, func, identity=None, cache=False, targetoptions={}):
+        for opt in targetoptions:
+            if opt == "usm_type":
+                self._usm_type = targetoptions[opt]
+                del targetoptions[opt]
+            elif opt == "device":
+                self._device = targetoptions[opt]
+                del targetoptions[opt]
+        if not self._usm_type:
+            # TODO: raise custom exception
+            raise Exception
+        if not self._device:
+            # TODO: raise custom exception
+            raise Exception
+        super.__init__(func, identity, cache, targetoptions)
+
+    def add(self, sig=None, argtypes=None, restype=None):
+        # Handle argtypes
+        if argtypes is not None:
+            warnings.warn(
+                "Keyword argument argtypes is deprecated", DeprecationWarning
+            )
+            if sig is not None:
+                raise AssertionError(
+                    "Both argtypes and signature cannot be provided "
+                    "at the same time"
+                )
+            if restype is None:
+                sig = tuple(argtypes)
+            else:
+                sig = restype(*argtypes)
+        del argtypes
+        del restype
+
+        # compile core as device function
+        args, return_type = sigutils.normalize_signature(sig)
+        devfnsig = signature(return_type, *args)
+
+        funcname = self.pyfunc.__name__
+        kernelsource = self._get_kernel_source(
+            self._kernel_template, devfnsig, funcname
+        )
+        corefn, return_type = self._compile_core(devfnsig)
+        glbl = self._get_globals(corefn)
+
+        # FIXME: The signature for the kernel has to be based on usm_array type
+        sig = signature(types.void, *([a[:] for a in args] + [return_type[:]]))
+
+        exec(kernelsource, glbl)
+
+        stager = glbl["__vectorized_%s" % funcname]
+        kernel = self._compile_kernel(stager, sig)
+
+        argdtypes = tuple(to_dtype(t) for t in devfnsig.args)
+        resdtype = to_dtype(return_type)
+        self.kernelmap[tuple(argdtypes)] = resdtype, kernel
+
     def _compile_core(self, sig):
         devfn = dpex.func(sig)(self.pyfunc)
         return devfn, devfn.cres.signature.return_type

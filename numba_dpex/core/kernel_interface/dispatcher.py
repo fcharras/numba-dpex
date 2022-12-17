@@ -25,7 +25,8 @@ from numba_dpex.core.exceptions import (
 )
 from numba_dpex.core.kernel_interface.arg_pack_unpacker import Packer
 from numba_dpex.core.kernel_interface.spirv_kernel import SpirvKernel
-from numba_dpex.dpctl_iface import USMNdArrayType
+from numba_dpex.core.types.usm_ndarray_type import USMNdArrayType
+from numba_dpex.utils import npytypes_array_to_dpex_array
 
 
 def get_ordered_arg_access_types(pyfunc, access_types):
@@ -403,7 +404,6 @@ class Dispatcher(object):
             local_range (_type_): _description_.
         """
         argtypes = [self.typingctx.resolve_argument_type(arg) for arg in args]
-
         exec_queue = self._determine_kernel_launch_queue(args, argtypes)
         backend = exec_queue.backend
 
@@ -437,7 +437,7 @@ class Dispatcher(object):
             " ".join(self._create_sycl_kernel_bundle_flags),
         )
         #  get the sycl::kernel
-        kernel = kernel_bundle.get_sycl_kernel(kernel.module_name)
+        sycl_kernel = kernel_bundle.get_sycl_kernel(kernel.module_name)
 
         packer = Packer(
             kernel_name=self.kernel_name,
@@ -448,7 +448,7 @@ class Dispatcher(object):
         )
 
         exec_queue.submit(
-            kernel,
+            sycl_kernel,
             packer.unpacked_args,
             global_range,
             local_range,
@@ -458,3 +458,99 @@ class Dispatcher(object):
 
         # TODO remove once NumPy support is removed
         packer.repacked_args
+
+
+class SpecializedDispatcher(Dispatcher):
+    def __init__(
+        self,
+        pyfunc,
+        argtypes,
+        usm_types,
+        device,
+        debug_flags=None,
+        compile_flags=None,
+    ):
+        self._argtypes = list(argtypes)
+        print(argtypes)
+        print(type(argtypes))
+        # Dpex does not yet have a way to declare array specialization
+        # and relies on Numba's notation (e.g., numba.float32[:]). For this
+        # reason, specialized kernel array args are initially inferred as
+        # numba.core.types.Array types. We then convert the
+        # numba.core.types.Array to numba_dpex.core.types.Array. When a
+        # specialized kernel is called we check if the type matches.
+        for i, argty in enumerate(self._argtypes):
+            if type(argty) is ArrayType:
+                usmndarrtype = USMNdArrayType(
+                    dtype=argty.dtype, ndim=argty.ndim, layout=argty.layout
+                )
+                self._argtypes[i] = usmndarrtype
+
+        self._device = dpctl.SyclDevice(device)
+        backend = self._device.backend
+        if self._device.backend not in [
+            dpctl.backend_type.opencl,
+            dpctl.backend_type.level_zero,
+        ]:
+            raise UnsupportedBackendError(
+                self.kernel_name, backend, Dispatcher._supported_backends
+            )
+
+        super().__init__(
+            pyfunc, debug_flags, compile_flags, array_access_specifiers=None
+        )
+
+        self._specialized_kernel = SpirvKernel(self.pyfunc, self.kernel_name)
+        self._specialized_kernel.compile(
+            arg_types=argtypes,
+            debug=self.debug_flags,
+            extra_compile_flags=self.compile_flags,
+        )
+
+    def __call__(self, *args, global_range=None, local_range=None):
+        argtypes = [self.typingctx.resolve_argument_type(arg) for arg in args]
+        exec_queue = self._determine_kernel_launch_queue(args, argtypes)
+
+        # Validated if the kernel was specialized for provided argtypes and
+        # device
+        for i, argty in enumerate(argtypes):
+            print("Called argty", argty)
+            print("expected argty", self._argtypes[i])
+            if isinstance(argty, type(self._argtypes[i])):
+                raise Exception
+
+        if exec_queue.device == self._device:
+            raise Exception
+
+        # TODO: Refactor after __getitem__ is removed
+        global_range, local_range = self._get_ranges(
+            global_range, local_range, exec_queue.sycl_device
+        )
+
+        # create a sycl::KernelBundle
+        kernel_bundle = dpctl_prog.create_program_from_spirv(
+            exec_queue,
+            self._specialized_kernel.device_driver_ir_module,
+            " ".join(self._create_sycl_kernel_bundle_flags),
+        )
+        #  get the sycl::kernel
+        sycl_kernel = kernel_bundle.get_sycl_kernel(
+            self._specialized_kernel.module_name
+        )
+
+        packer = Packer(
+            kernel_name=self.kernel_name,
+            arg_list=args,
+            argty_list=argtypes,
+            queue=exec_queue,
+            access_specifiers_list=None,
+        )
+
+        exec_queue.submit(
+            sycl_kernel,
+            packer.unpacked_args,
+            global_range,
+            local_range,
+        )
+
+        exec_queue.wait()

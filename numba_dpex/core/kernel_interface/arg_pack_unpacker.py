@@ -15,7 +15,7 @@ from numba_dpex.core.exceptions import (
     UnsupportedAccessQualifierError,
     UnsupportedKernelArgumentError,
 )
-from numba_dpex.dpctl_iface import USMNdArrayType
+from numba_dpex.core.types.usm_ndarray_type import USMNdArrayType
 
 
 class _NumPyArrayPackerPayload:
