@@ -5,6 +5,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import dpctl
+import dpctl.tensor as dpt
 import numpy as np
 import pytest
 from numba import float32, float64, int32, int64, njit, vectorize
@@ -66,8 +67,7 @@ def input_type(request):
     return request.param
 
 
-@pytest.mark.parametrize("filter_str", filter_strings)
-def test_vectorize(filter_str, shape, dtypes, input_type):
+def test_vectorize(shape, dtypes, input_type):
     def vector_add(a, b):
         return a + b
 
@@ -76,16 +76,15 @@ def test_vectorize(filter_str, shape, dtypes, input_type):
     size, shape = shape
 
     if input_type == "array":
-        A = np.arange(size, dtype=dtype).reshape(shape)
-        B = np.arange(size, dtype=dtype).reshape(shape)
+        A = dpt.reshape(dpt.arange(size, dtype=dtype), shape)
+        B = dpt.reshape(dpt.arange(size, dtype=dtype), shape)
     elif input_type == "scalar":
         A = dtype(1.2)
         B = dtype(2.3)
 
-    with dpctl.device_context(filter_str):
-        f = vectorize(sig, target="dpex")(vector_add)
-        expected = f(A, B)
-        actual = vector_add(A, B)
+    f = vectorize(sig, usm_type="device", device="0")(vector_add)
+    expected = f(A, B).asnumpy()
+    actual = vector_add(A, B)
 
-        max_abs_err = np.sum(expected) - np.sum(actual)
-        assert max_abs_err < 1e-5
+    max_abs_err = np.sum(expected) - np.sum(actual)
+    assert max_abs_err < 1e-5
