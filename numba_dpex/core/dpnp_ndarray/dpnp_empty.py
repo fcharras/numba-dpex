@@ -18,25 +18,27 @@ from numba_dpex.core.types import DpnpNdArray
 
 @type_callable(dpnp.empty)
 def type_dpnp_empty(context):
-    def typer(shape, dtype=None, usm_type=None, sycl_queue=None):
+    def typer(shape, dtype=None, usm_type=None, device=None, sycl_queue=None):
         from numba.core.typing.npydecl import parse_dtype, parse_shape
 
-        if dtype is None:
-            nb_dtype = types.double
-        else:
-            nb_dtype = parse_dtype(dtype)
-
         ndim = parse_shape(shape)
+
+        if not ndim:
+            raise ...
 
         if usm_type is None:
             usm_type = "device"
         else:
             usm_type = parse_usm_type(usm_type)
 
-        if nb_dtype is not None and ndim is not None and usm_type is not None:
-            return DpnpNdArray(
-                dtype=nb_dtype, ndim=ndim, layout="C", usm_type=usm_type
-            )
+        return DpnpNdArray(
+            dtype=dtype,
+            ndim=ndim,
+            layout="C",
+            usm_type=usm_type,
+            device=device,
+            queue=sycl_queue,
+        )
 
     return typer
 

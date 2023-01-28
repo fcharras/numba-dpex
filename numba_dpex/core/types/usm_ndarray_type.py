@@ -9,6 +9,7 @@ import dpctl
 import dpctl.tensor
 from numba.core.typeconv import Conversion
 from numba.core.types.npytypes import Array
+from numba.np.numpy_support import from_dtype
 
 from numba_dpex.utils import address_space
 
@@ -18,10 +19,10 @@ class USMNdArray(Array):
 
     def __init__(
         self,
-        dtype,
         ndim,
-        layout,
-        usm_type="unknown",
+        layout="C",
+        dtype=None,
+        usm_type="device",
         device="unknown",
         queue=None,
         readonly=False,
@@ -32,15 +33,36 @@ class USMNdArray(Array):
         self.usm_type = usm_type
         self.addrspace = addrspace
 
-        # Normalize the device filter string and get the fully qualified three
-        # tuple (backend:device_type:device_num) filter string from dpctl.
-        if device != "unknown":
-            _d = dpctl.SyclDevice(device)
-            self.device = _d.filter_string
+        if queue is not None and device != "unknown":
+            if not isinstance(device, str):
+                raise ...
+            if not isinstance(queue, dpctl.SyclQueue):
+                raise ...
+            d1 = queue.SyclDevice()
+            d2 = dpctl.SyclDevice(device)
+            if d1 != d2:
+                raise ...
+            self.queue = queue
+        elif queue is None and device != "unknown":
+            if not isinstance(device, str):
+                raise ...
+            self.queue = dpctl.SyclQueue(device)
+        elif queue is not None and device == "unknown":
+            if not isinstance(queue, dpctl.SyclQueue):
+                raise ...
+            self.device = self.queue.sycl_device.filter_string
+            self.queue = queue
         else:
-            self.device = "unknown"
+            self.queue = dpctl.SyclQueue()
+            self.device = self.queue.sycl_device.filter_string
 
-        self.queue = queue
+        if not dtype:
+            dummy_tensor = dpctl.tensor.empty(
+                sh=1, order=layout, usm_type=usm_type, sycl_queue=self.queue
+            )
+            _dtype = dummy_tensor.dtype  # convert dpnp type to numba/numpy type
+            self.dtype = from_dtype(_dtype)
+            # from_dtype(self.dtype)
 
         if name is None:
             type_name = "usm_ndarray"
@@ -50,7 +72,7 @@ class USMNdArray(Array):
                 type_name = "unaligned " + type_name
             name_parts = (
                 type_name,
-                dtype,
+                self.dtype,
                 ndim,
                 layout,
                 self.addrspace,
