@@ -4,11 +4,12 @@
 
 import dpnp
 from llvmlite import ir
-from numba import types
+from numba import errors, types
 from numba.core import cgutils
 from numba.extending import (
     intrinsic,
     lower_builtin,
+    overload,
     overload_classmethod,
     type_callable,
 )
@@ -22,6 +23,14 @@ def type_dpnp_empty(context):
         from numba.core.typing.npydecl import parse_dtype, parse_shape
 
         ndim = parse_shape(shape)
+
+        if not isinstance(device, types.StringLiteral):
+            raise errors.ForbiddenConstruct(device)
+        if not isinstance(usm_type, types.StringLiteral):
+            raise errors.ForbiddenConstruct(usm_type)
+
+        device = device.literal_value
+        usm_type = usm_type.literal_value
 
         if not ndim:
             raise ...
