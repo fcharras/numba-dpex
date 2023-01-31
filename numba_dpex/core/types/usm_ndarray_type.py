@@ -48,12 +48,14 @@ class USMNdArray(Array):
                     "The queue specified is not found on the device specified"
                 )
             self.queue = queue
+            self.device = device
         elif queue is None and device != "unknown":
             if not isinstance(device, str):
                 raise TypeError(
                     "The device is expecting a str object specifying a SYCL filter selector string"
                 )
             self.queue = dpctl.SyclQueue(device)
+            self.device = device
         elif queue is not None and device == "unknown":
             if not isinstance(queue, dpctl.SyclQueue):
                 raise TypeError("The queue is expecting a SyclQueue object")
@@ -85,10 +87,11 @@ class USMNdArray(Array):
                 self.addrspace,
                 usm_type,
                 self.device,
+                self.queue,
             )
             name = (
                 "%s(dtype=%s, ndim=%s, layout=%s, address_space=%s, "
-                "usm_type=%s, sycl_device=%s)" % name_parts
+                "usm_type=%s, device=%s, sycl_device=%s)" % name_parts
             )
 
         super().__init__(

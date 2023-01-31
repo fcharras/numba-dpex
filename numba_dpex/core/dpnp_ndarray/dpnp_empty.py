@@ -17,30 +17,34 @@ from numba.extending import (
 from numba_dpex.core.types import DpnpNdArray
 
 
-@type_callable(dpnp.empty)
-def type_dpnp_empty(context):
-    def typer(shape, dtype=None, usm_type=None, device=None, sycl_queue=None):
-        from numba.core.typing.npydecl import parse_dtype, parse_shape
+@overload(dpnp.empty, prefer_literal=True)
+# @overload(dpnp.empty)
+def type_dpnp_empty(
+    shape, dtype=None, usm_type=None, device=None, sycl_queue=None
+):
 
-        ndim = parse_shape(shape)
+    from numba.core.typing.npydecl import parse_dtype, parse_shape
 
-        if not isinstance(device, types.StringLiteral):
-            raise errors.ForbiddenConstruct(device)
-        if not isinstance(usm_type, types.StringLiteral):
-            raise errors.ForbiddenConstruct(usm_type)
+    ndim = parse_shape(shape)
 
-        device = device.literal_value
-        usm_type = usm_type.literal_value
+    # if not isinstance(device, types.StringLiteral):
+    #    raise errors.ForbiddenConstruct(device)
+    # if not isinstance(usm_type, types.StringLiteral):
+    #    raise errors.ForbiddenConstruct(usm_type)
 
-        if not ndim:
-            raise ...
+    device = device.literal_value
+    # usm_type = usm_type.literal_value
+    breakpoint()
+    if not ndim:
+        raise ...
 
-        if usm_type is None:
-            usm_type = "device"
-        else:
-            usm_type = parse_usm_type(usm_type)
+    if usm_type is None:
+        usm_type = "device"
+    else:
+        usm_type = parse_usm_type(usm_type)
 
-        return DpnpNdArray(
+    if usm_type is not None and ndim is not None:
+        retty = DpnpNdArray(
             dtype=dtype,
             ndim=ndim,
             layout="C",
@@ -49,7 +53,45 @@ def type_dpnp_empty(context):
             queue=sycl_queue,
         )
 
-    return typer
+        def impl(
+            shape, dtype=None, usm_type=None, device=None, sycl_queue=None
+        ):
+            return impl_dpnp_empty(
+                shape, dtype, usm_type, device, sycl_queue, retty
+            )
+
+        return impl
+    else:
+        msg = (
+            f"Cannot parse input types to function dpnp.empty({shape}, {dtype})"
+        )
+        raise errors.TypingError(msg)
+
+
+@intrinsic
+def impl_dpnp_empty(
+    tyctx,
+    ty_shape,
+    ty_dtype,
+    ty_usm_type,
+    ty_device,
+    ty_sycl_queue,
+    ty_retty_ref,
+):
+    print("--------getting here")
+    ty_retty = ty_retty_ref.instance_type
+    sig = ty_retty(
+        ty_shape, ty_dtype, ty_usm_type, ty_device, ty_sycl_queue, ty_retty_ref
+    )
+    breakpoint()
+
+    def codegen(cgctx, builder, sig, llargs):
+        print("------------CODEGEN is called !!!!!!!")
+        arrtype = _parse_empty_args(cgctx, builder, sig, llargs)
+        ary = _empty_nd_impl(cgctx, builder, *arrtype)
+        return ary._getvalue()
+
+    return sig, codegen
 
 
 def parse_usm_type(usm_type):
@@ -66,16 +108,18 @@ def parse_usm_type(usm_type):
         return usm_type_str
 
 
+"""
 @lower_builtin(dpnp.empty, types.Any, types.Any, types.Any, types.Any)
 def impl_dpnp_empty(context, builder, sig, args):
-    """
+    \"""
     Inputs: shape, dtype, usm_type, queue
-    """
+    \"""
     from numba.core.imputils import impl_ret_new_ref
 
     empty_args = _parse_empty_args(context, builder, sig, args)
     ary = _empty_nd_impl(context, builder, *empty_args)
     return impl_ret_new_ref(context, builder, sig.return_type, ary._getvalue())
+"""
 
 
 def _parse_empty_args(context, builder, sig, args):
@@ -105,6 +149,7 @@ def _empty_nd_impl(context, builder, arrtype, shapes, queue):
         signature,
     )
 
+    breakpoint()
     arycls = make_array(arrtype)
     ary = arycls(context, builder)
 
