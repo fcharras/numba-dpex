@@ -33,7 +33,9 @@ class USMNdArray(Array):
         self.usm_type = usm_type
         self.addrspace = addrspace
 
-        breakpoint()
+        print("<<<<<<<<<<<<<<<< device", device)
+        print("<<<<<<<<<<<<<<<< usm_type", usm_type)
+
         if queue is not None and device != "unknown":
             if not isinstance(device, str):
                 raise TypeError(

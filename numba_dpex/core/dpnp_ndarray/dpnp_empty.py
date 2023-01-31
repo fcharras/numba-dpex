@@ -17,6 +17,35 @@ from numba.extending import (
 from numba_dpex.core.types import DpnpNdArray
 
 
+def _parse_usm_type(usm_type):
+    """
+    Return the usm_type, if it is a string literal.
+    """
+    from numba.core.errors import TypingError
+
+    if isinstance(usm_type, types.StringLiteral):
+        usm_type_str = usm_type.literal_value
+        if usm_type_str not in ["shared", "device", "host"]:
+            msg = f"Invalid usm_type specified: '{usm_type_str}'"
+            raise TypingError(msg)
+        return usm_type_str
+    else:
+        raise TypeError
+
+
+def _parse_device_filter_string(device):
+    """
+    Return the device filter string, if it is a string literal.
+    """
+    from numba.core.errors import TypingError
+
+    if isinstance(device, types.StringLiteral):
+        device_filter_str = device.literal_value
+        return device_filter_str
+    else:
+        raise TypeError
+
+
 @overload(dpnp.empty, prefer_literal=True)
 # @overload(dpnp.empty)
 def type_dpnp_empty(
@@ -31,17 +60,23 @@ def type_dpnp_empty(
     #    raise errors.ForbiddenConstruct(device)
     # if not isinstance(usm_type, types.StringLiteral):
     #    raise errors.ForbiddenConstruct(usm_type)
+    import numba
 
-    device = device.literal_value
+    # n = numba.literally(usm_type)
+    # device = device.literal_value
     # usm_type = usm_type.literal_value
-    breakpoint()
+
     if not ndim:
         raise ...
 
-    if usm_type is None:
-        usm_type = "device"
-    else:
-        usm_type = parse_usm_type(usm_type)
+    if usm_type is not None:
+        usm_type = _parse_usm_type(usm_type)
+
+    if device is not None:
+        device = _parse_device_filter_string(device)
+
+    print(">>>>>>>>>>>>>>>>>>>>>>> usm_type:", usm_type)
+    print(">>>>>>>>>>>>>>>>>>>>>>> device:", device)
 
     if usm_type is not None and ndim is not None:
         retty = DpnpNdArray(
@@ -50,11 +85,15 @@ def type_dpnp_empty(
             layout="C",
             usm_type=usm_type,
             device=device,
-            queue=sycl_queue,
+            queue=None,
         )
 
         def impl(
-            shape, dtype=None, usm_type=None, device=None, sycl_queue=None
+            shape,
+            dtype=None,
+            usm_type=None,
+            device=None,
+            sycl_queue=None,
         ):
             return impl_dpnp_empty(
                 shape, dtype, usm_type, device, sycl_queue, retty
@@ -80,10 +119,11 @@ def impl_dpnp_empty(
 ):
     print("--------getting here")
     ty_retty = ty_retty_ref.instance_type
+    print("ty_usm_type ---------------", ty_usm_type)
+    print("ty_device ---------------", ty_device)
     sig = ty_retty(
         ty_shape, ty_dtype, ty_usm_type, ty_device, ty_sycl_queue, ty_retty_ref
     )
-    breakpoint()
 
     def codegen(cgctx, builder, sig, llargs):
         print("------------CODEGEN is called !!!!!!!")
@@ -92,20 +132,6 @@ def impl_dpnp_empty(
         return ary._getvalue()
 
     return sig, codegen
-
-
-def parse_usm_type(usm_type):
-    """
-    Return the usm_type, if it is a string literal.
-    """
-    from numba.core.errors import TypingError
-
-    if isinstance(usm_type, types.StringLiteral):
-        usm_type_str = usm_type.literal_value
-        if usm_type_str not in ["shared", "device", "host"]:
-            msg = f"Invalid usm_type specified: '{usm_type_str}'"
-            raise TypingError(msg)
-        return usm_type_str
 
 
 """
@@ -149,7 +175,6 @@ def _empty_nd_impl(context, builder, arrtype, shapes, queue):
         signature,
     )
 
-    breakpoint()
     arycls = make_array(arrtype)
     ary = arycls(context, builder)
 
